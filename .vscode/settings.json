@@ -1,0 +1,16 @@
+{
+    "files.exclude": {
+        "**/*.o": true,
+        "**/*.d": true,
+        "**/node_modules": true,
+        "**/.git": true,
+        "user/_*": true,
+        "**/*.sym": true,
+        "**/*.asm": true,
+        "**/*.ld": true
+    },
+    "search.exclude": {
+        "**/*.o": true,
+        "**/*.d": true
+    }
+}
