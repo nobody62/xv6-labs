@@ -167,6 +167,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
+// 清空第3级页表,可选释放物理内存
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
@@ -268,6 +269,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 
 // Recursively free page-table pages.
 // All leaf mappings must already have been removed.
+// 清空第一&第二级页表,第三级页表必须已经被清空
 void
 freewalk(pagetable_t pagetable)
 {
@@ -285,6 +287,23 @@ freewalk(pagetable_t pagetable)
   }
   kfree((void*)pagetable);
 }
+
+// // 清空全部三级页表
+// void
+// freepagetb(pagetable_t pagetable)
+// {
+//   for(int i = 0; i < 512; i++){
+//     pte_t pte = pagetable[i];
+//     if((pte & PTE_V)){  // 1/2级页表
+//       if((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+//         uint64 child = PTE2PA(pte);
+//         freepagetb((pagetable_t)child);
+//       }
+//       pagetable[i] = 0;
+//     }
+//   }
+//   kfree((void*)pagetable);
+// }
 
 // Free user memory pages,
 // then free page-table pages.
@@ -435,5 +454,26 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }
+}
+
+void
+vmprint(pagetable_t pagetable, int idx)
+{
+  if(idx == 0){
+    printf("page table %p\n", pagetable);
+  }
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V)){
+      for(int i=0;i<idx;++i){
+        printf(".. ");
+      }
+      pagetable_t child = (pagetable_t)PTE2PA(pte);
+      printf("..%d: pte %p pa %p\n", i, pte, child);
+      if((pte & (PTE_R|PTE_W|PTE_X)) == 0){  
+        vmprint(child, idx+1);
+      }
+    }
   }
 }

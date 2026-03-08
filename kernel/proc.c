@@ -140,6 +140,17 @@ found:
     return 0;
   }
 
+  // p->kpagetable = kvminit1();
+  // // char *pa = kalloc();
+  // // if(pa == 0)
+  // //   panic("kalloc");
+  // pte_t *pte;
+  // uint64 va = KSTACK((int) (p - proc));
+  // pte = walk(kernel_pagetable, va, 0);
+  // uint64 pa = PTE2PA(*pte);
+
+  // kvmmap(p->kpagetable, va, pa, PGSIZE, PTE_R | PTE_W);
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -158,6 +169,18 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  // if(p->kpagetable){
+  //   // uint64 va = KSTACK((int) (p - proc));
+  //   // pte_t *pte = walk(p->kpagetable, va, 0);
+  //   // if(pte && (*pte & PTE_V)){
+  //   //   uint64 pa = PTE2PA(*pte);
+  //   //   kfree((void*)pa);
+  //   // }
+  //   freepagetb(p->kpagetable);
+  // }
+  // p->kpagetable = 0;
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -459,11 +482,17 @@ scheduler(void)
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
+        // // sfence_vma();
+        // w_satp(MAKE_SATP(p->kpagetable));
+        // sfence_vma();
         c->proc = p;
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
+        // // sfence_vma();
+        // w_satp(MAKE_SATP(kernel_pagetable));
+        // sfence_vma();
         c->proc = 0;
       }
       release(&p->lock);
