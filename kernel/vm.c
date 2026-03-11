@@ -302,6 +302,7 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
+#if 0
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
@@ -331,6 +332,37 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
+#else
+int
+uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    if(*pte & PTE_W){
+      *pte &= ~PTE_W;
+      *pte |= PTE_COW;
+    }
+    flags = PTE_FLAGS(*pte);
+    addref((uint64)pa);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+#endif
 
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
@@ -345,6 +377,35 @@ uvmclear(pagetable_t pagetable, uint64 va)
   *pte &= ~PTE_U;
 }
 
+int 
+cowcopy(pagetable_t pagetable, uint64 va)
+{
+  if(va >= MAXVA) return -1;
+  va = PGROUNDDOWN(va);
+  pte_t* pte = walk(pagetable, va, 0);
+  if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_COW) == 0){
+    return 0;
+  }
+  uint64 pa = PTE2PA(*pte);
+  if(getref(pa) == 1){
+    *pte |= PTE_W;
+    *pte &= ~PTE_COW;
+  } else{
+    uint64 npa = (uint64)kalloc();
+    if(npa == 0)
+      return -1;
+      // panic("kalloc");
+    memmove((void*)npa, (char*)pa, PGSIZE);
+    uint flags = PTE_FLAGS(*pte);
+    flags |= PTE_W;
+    flags &= ~PTE_COW;
+    *pte = PA2PTE(npa) | flags;
+    kfree((void*)pa);
+  }
+  sfence_vma();
+  return 0;
+}
+
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
@@ -355,6 +416,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if(cowcopy(pagetable, va0))
+      return -1;
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;

@@ -65,6 +65,28 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 15){  // COW
+    uint64 va = r_stval();
+    pte_t *pte = walk(p->pagetable, PGROUNDDOWN(va), 0);
+    if(pte && *pte & PTE_V && *pte & PTE_COW){
+      uint64 pa = PTE2PA(*pte);
+      if(getref(pa) == 1){
+        *pte |= PTE_W;
+        *pte &= ~PTE_COW;
+      } else if(getref(pa) > 1){
+        uint64 npa = (uint64)kalloc();
+        if(npa == 0)
+          panic("kalloc");
+        memmove((void*)npa, (char*)pa, PGSIZE);
+        uint flags = PTE_FLAGS(*pte);
+        flags |= PTE_W;
+        flags &= ~PTE_COW;
+        *pte = PA2PTE(npa) | flags;
+        
+        kfree((void*)pa);
+      }
+    }
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
