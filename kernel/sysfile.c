@@ -503,3 +503,55 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  int len, prot, flags, fd, offs;
+  struct file* f;
+  argaddr(0, &addr);
+  argint(1, &len);
+  argint(2, &prot);
+  argint(3, &flags);
+  argfd(4, &fd, &f);
+  argint(5, &offs);
+  if(!f->writable && (prot & PROT_WRITE) && (flags & MAP_SHARED))
+    return -1;
+  len = PGROUNDUP(len);
+
+  struct vma* v = 0;
+  struct proc* p = myproc();
+  for(int i=0;i<NVMA;++i){
+    if(!p->vmas[i].valid){
+      v = &p->vmas[i];
+      v->valid = 1;
+      break;
+    }
+  }
+  if(!v)
+    return -1;
+  
+  v->addr = p->sz;
+  v->length = len;
+  v->prot = prot;
+  v->flags = flags;
+  v->f = filedup(f);  // add ref
+  v->offset = offs;
+
+  p->sz += len;
+
+  return v->addr;
+  
+}
+
+uint64
+sys_munmap(void)
+{
+  uint64 beg;
+  int len;
+  argaddr(0, &beg);
+  argint(1, &len);
+  // end = beg + len;
+  return do_munmap(beg, len);
+}

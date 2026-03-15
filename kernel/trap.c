@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
+#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -15,6 +19,7 @@ extern char trampoline[], uservec[], userret[];
 void kernelvec();
 
 extern int devintr();
+int vma_handler(uint64);
 
 void
 trapinit(void)
@@ -65,6 +70,12 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 13 || r_scause() == 15){
+    uint64 addr = r_stval();
+    if(addr >= p->sz || vma_handler(addr) != 0) {
+      setkilled(p);
+    }
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
@@ -219,3 +230,47 @@ devintr()
   }
 }
 
+int
+vma_handler(uint64 addr)
+{
+  struct proc* p = myproc();
+  struct vma* v = 0;
+  for(int i=0;i<NVMA;++i){
+    if(p->vmas[i].valid && addr >= p->vmas[i].addr && addr < p->vmas[i].addr+p->vmas[i].length){
+      v = &p->vmas[i];
+      break;
+    }
+  }
+  if(!v){
+    // setkilled(p);
+    return -1;
+  }
+
+  void* pa = kalloc();
+  if(!pa){
+    panic("usertrap: kalloc");
+  }
+  memset(pa, 0, PGSIZE);
+
+  uint64 va = PGROUNDDOWN(addr);
+  int offs = va - v->addr + v->offset;
+
+  ilock(v->f->ip);
+  readi(v->f->ip, 0, (uint64)pa, offs, PGSIZE);
+  iunlock(v->f->ip);
+
+  int flags = PTE_U;
+  if(v->prot & PROT_READ) flags |= PTE_R;
+  if(v->prot & PROT_WRITE) flags |= PTE_W;
+  if(v->prot & PROT_EXEC) flags |= PTE_X;
+  
+  // if(r_scause() == 13 && v->f->readable == 0) return -1;
+  // if(r_scause() == 15 && v->f->writable == 0) return -1;
+
+  if(mappages(p->pagetable, va, PGSIZE, (uint64)pa, flags) != 0){
+    kfree(pa);
+    return -1;
+    // setkilled(p);
+  }
+  return 0;
+} 

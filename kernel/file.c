@@ -12,6 +12,7 @@
 #include "file.h"
 #include "stat.h"
 #include "proc.h"
+#include "fcntl.h"
 
 struct devsw devsw[NDEV];
 struct {
@@ -178,5 +179,52 @@ filewrite(struct file *f, uint64 addr, int n)
   }
 
   return ret;
+}
+
+uint64
+do_munmap(uint64 beg, int len)
+{
+  uint64 end = beg + len;
+  struct proc* p = myproc();
+  struct vma* v = 0;
+  for(int i=0;i<NVMA;++i){
+    struct vma* vt = &p->vmas[i];
+    if(vt->valid && (vt->addr == beg || vt->addr + vt->length == end)){
+      v = vt;
+      break;
+    }
+  }
+
+  if(!v){
+    return -1;
+  }
+
+  for(uint64 a = beg;a<end;a+=PGSIZE){
+    pte_t* pte = walk(p->pagetable, a, 0);
+    if(pte && (*pte&PTE_V) && (*pte&PTE_U)){
+      if(v->flags & MAP_SHARED){ // && (*pte) & PTE_D
+        // writefile
+        begin_op();
+        ilock(v->f->ip);
+        writei(v->f->ip, 0, PTE2PA(*pte), v->offset + a - v->addr, PGSIZE);
+        iunlock(v->f->ip);
+        end_op();
+      }
+      uvmunmap(p->pagetable, a, 1, 1);
+    }
+  }
+
+  if(len == v->length){
+    fileclose(v->f);
+    v->valid = 0;
+  } else if(beg == v->addr){
+    v->addr = end;
+    v->length -= len;
+    v->offset += len;
+  } else{
+    v->length -= len;
+  }
+
+  return 0;
 }
 

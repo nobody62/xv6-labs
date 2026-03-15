@@ -310,6 +310,14 @@ fork(void)
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
+  for(int i=0;i<NVMA;++i){
+    if(p->vmas[i].valid){
+      // np->vmas[i] = p->vmas[i];
+      memmove(&np->vmas[i], &p->vmas[i], sizeof(p->vmas[i]));
+      filedup(np->vmas[i].f);
+    }
+  }
+
   pid = np->pid;
 
   release(&np->lock);
@@ -357,6 +365,12 @@ exit(int status)
       struct file *f = p->ofile[fd];
       fileclose(f);
       p->ofile[fd] = 0;
+    }
+  }
+
+  for(int i=0;i<NVMA;++i){
+    if(p->vmas[i].valid){
+      do_munmap(p->vmas[i].addr, p->vmas[i].length);
     }
   }
 
