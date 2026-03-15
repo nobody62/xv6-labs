@@ -28,7 +28,7 @@
 #define E1000_CTL_SLU     0x00000040    /* set link up */
 #define E1000_CTL_FRCSPD  0x00000800    /* force speed */
 #define E1000_CTL_FRCDPLX 0x00001000    /* force duplex */
-#define E1000_CTL_RST     0x00400000    /* full reset ???*/
+#define E1000_CTL_RST     0x04000000    /* full reset ???*/
 
 /* Transmit Control */
 #define E1000_TCTL_RST    0x00000001    /* software reset */
