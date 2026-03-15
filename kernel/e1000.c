@@ -48,7 +48,7 @@ e1000_init(uint32 *xregs)
   regs[E1000_TDBAL] = (uint64) tx_ring;
   if(sizeof(tx_ring) % 128 != 0)
     panic("e1000");
-  regs[E1000_TDLEN] = sizeof(tx_ring);
+  regs[E1000_TDLEN] = sizeof(tx_ring);  // empty for e1000
   regs[E1000_TDH] = regs[E1000_TDT] = 0;
   
   // [E1000 14.4] Receive initialization
@@ -63,7 +63,7 @@ e1000_init(uint32 *xregs)
   if(sizeof(rx_ring) % 128 != 0)
     panic("e1000");
   regs[E1000_RDH] = 0;
-  regs[E1000_RDT] = RX_RING_SIZE - 1;
+  regs[E1000_RDT] = RX_RING_SIZE - 1;  // full for e1000
   regs[E1000_RDLEN] = sizeof(rx_ring);
 
   // filter by qemu's MAC address, 52:54:00:12:34:56
@@ -102,6 +102,23 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
+  acquire(&e1000_lock);
+  int i = regs[E1000_TDT];
+  if((tx_ring[i].status & E1000_TXD_STAT_DD) == 0){
+    return -1;
+  }
+  if(tx_mbufs[i])
+    mbuffree(tx_mbufs[i]);
+  tx_mbufs[i] = m;
+  tx_ring[i].addr = (uint64)m->head;
+  tx_ring[i].length = m->len;
+  tx_ring[i].cso = 0;
+  tx_ring[i].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  tx_ring[i].status = 0;
+  tx_ring[i].css = 0;
+  tx_ring[i].special = 0;
+  regs[E1000_TDT] = (i + 1) % TX_RING_SIZE;
+  release(&e1000_lock);
   
   return 0;
 }
@@ -115,6 +132,19 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  int i = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+  while(rx_ring[i].status & E1000_RXD_STAT_DD){
+    rx_mbufs[i]->len = rx_ring[i].length;
+    net_rx(rx_mbufs[i]);
+    rx_mbufs[i] = mbufalloc(0);
+    if (!rx_mbufs[i])
+      panic("e1000");
+    rx_ring[i].addr = (uint64) rx_mbufs[i]->head;
+    rx_ring[i].status = 0;
+    regs[E1000_RDT] = i;
+    i = (i + 1) % RX_RING_SIZE;
+  }
+  
 }
 
 void

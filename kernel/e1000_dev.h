@@ -11,7 +11,7 @@
 #define E1000_TCTL     (0x00400/4)  /* TX Control - RW */
 #define E1000_TIPG     (0x00410/4)  /* TX Inter-packet gap -RW */
 #define E1000_RDBAL    (0x02800/4)  /* RX Descriptor Base Address Low - RW */
-#define E1000_RDTR     (0x02820/4)  /* RX Delay Timer */
+#define E1000_RDTR     (0x02820/4)  /* RX Delay Timer - RW */
 #define E1000_RADV     (0x0282C/4)  /* RX Interrupt Absolute Delay Timer */
 #define E1000_RDH      (0x02810/4)  /* RX Descriptor Head - RW */
 #define E1000_RDT      (0x02818/4)  /* RX Descriptor Tail - RW */
@@ -28,7 +28,7 @@
 #define E1000_CTL_SLU     0x00000040    /* set link up */
 #define E1000_CTL_FRCSPD  0x00000800    /* force speed */
 #define E1000_CTL_FRCDPLX 0x00001000    /* force duplex */
-#define E1000_CTL_RST     0x00400000    /* full reset */
+#define E1000_CTL_RST     0x00400000    /* full reset ???*/
 
 /* Transmit Control */
 #define E1000_TCTL_RST    0x00000001    /* software reset */
@@ -99,13 +99,13 @@
 // [E1000 3.3.3]
 struct tx_desc
 {
-  uint64 addr;
-  uint16 length;
-  uint8 cso;
-  uint8 cmd;
-  uint8 status;
-  uint8 css;
-  uint16 special;
+  uint64 addr;    // Buffer addr
+  uint16 length;  // Data length
+  uint8 cso;      // Checksum Offset
+  uint8 cmd;      // Command to ctrl hardware
+  uint8 status;   // Return status
+  uint8 css;      // Checksum Start
+  uint16 special; // Vlan tags
 };
 
 /* Receive Descriptor bit definitions [E1000 3.2.3.1] */
